@@ -1,25 +1,9 @@
-# FastAPI pour créer l'API
 fastapi==0.100.0
-
-# Serveur ASGI pour FastAPI
 uvicorn[standard]==0.22.0
-
-# Pandas pour manipuler les DataFrames
 pandas==2.1.1
-
-# scikit-learn pour le pipeline et StandardScaler
-scikit-learn==1.3.0
-
-# LightGBM pour le modèle
-lightgbm==4.0.0
-
-# Imbalanced-learn pour le RandomUnderSampler
+scikit-learn==1.3.2        # mets la dernière version stable 1.3.x
+lightgbm==3.3.5            # version stable compatible Linux
 imbalanced-learn==0.12.4
-
-# Joblib pour sauvegarder et recharger le pipeline
 joblib==1.3.2
-
-# Requests pour tester l'API depuis Streamlit
-requests==2.31.0
-
-streamlit==1.28.0 
+requests==2.32.0           # pour Evidently si besoin
+streamlit==1.28.0
