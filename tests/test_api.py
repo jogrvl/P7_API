@@ -1,7 +1,8 @@
 # tests/test_api.py
 from fastapi.testclient import TestClient
-from src.api import app
+from src.api import app  # ton app FastAPI
 
+# Créer le client pour les tests
 client = TestClient(app)
 
 def test_root():
@@ -18,10 +19,8 @@ def test_predict():
         "AMT_CREDIT": 600000,
         "APPROVED_DECISION_MAX": 0.5
     }
-
     response = client.post("/predict", json=payload)
     assert response.status_code == 200
-
     json_resp = response.json()
     assert "score_probabilite" in json_resp
     assert "prediction" in json_resp
