@@ -1,18 +1,15 @@
 # tests/test_api.py
 from fastapi.testclient import TestClient
-from src.api import app  # ton app FastAPI
+from src.api import app
 
-# Créer le client pour les tests
 client = TestClient(app)
 
 def test_root():
-    """Test de la route racine"""
     response = client.get("/")
     assert response.status_code == 200
     assert "API Scoring Crédit" in response.json()["message"]
 
 def test_predict():
-    """Test de la route /predict avec un jeu de données factice"""
     payload = {
         "DAYS_EMPLOYED": -2000,
         "AMT_INCOME_TOTAL": 150000,
