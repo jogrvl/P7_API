@@ -7,7 +7,6 @@ imbalanced-learn==0.12.4
 joblib==1.4.2
 requests==2.32.3
 streamlit==1.39.0
-starlette>=0.27.0
-httpx
-pytest
-
+starlette==0.36.3
+httpx==0.24.1
+pytest==8.4.2
