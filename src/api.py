@@ -1,6 +1,5 @@
 # src/api.py
-
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import pandas as pd
 import joblib
@@ -9,44 +8,47 @@ import os
 # Seuil métier optimal
 THRESHOLD_METIER = 0.54
 
-# Charger le pipeline
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "modele_pipeline.pkl")
-pipe = joblib.load(MODEL_PATH)
+# Chemin vers le pipeline et les données
+BASE_DIR = os.path.dirname(__file__)
+MODEL_PATH = os.path.join(BASE_DIR, "..", "modele_pipeline.pkl")
+DATA_PATH = os.path.join(BASE_DIR, "..", "train_df_cleaned.csv")
 
-# Liste de toutes les colonnes du pipeline
-ALL_COLUMNS = pipe.feature_names_in_  # sklearn >=1.0, sinon X_train.columns.tolist()
+# Charger le pipeline et les données
+pipe = joblib.load(MODEL_PATH)
+df_clients = pd.read_csv(DATA_PATH)
+
+# Colonnes attendues par le pipeline
+ALL_COLUMNS = pipe.feature_names_in_
 
 # Créer l'application FastAPI
 app = FastAPI(title="API Scoring Crédit P7", version="1.0")
 
-# Définir les features principales que l'utilisateur doit remplir
-class ClientData(BaseModel):
-    DAYS_EMPLOYED: float
-    AMT_INCOME_TOTAL: float
-    AMT_CREDIT: float
-    APPROVED_DECISION_MAX: float
-    # Ajoute ici d'autres features principales si tu veux
+# Modèle Pydantic pour l'input
+class ClientRequest(BaseModel):
+    SK_ID_CURR: int
 
 @app.get("/")
 def root():
     return {"message": "API Scoring Crédit - OK"}
 
 @app.post("/predict")
-def predict_score(data: ClientData):
-    # Convertir l'entrée utilisateur en dictionnaire
-    input_dict = data.dict()
-    
-    # Remplir un dictionnaire avec toutes les colonnes du pipeline
-    full_dict = {col: 0.0 for col in ALL_COLUMNS}  # valeurs par défaut
-    for col in input_dict:
-        if col in ALL_COLUMNS:
-            full_dict[col] = input_dict[col]
+def predict_score(request: ClientRequest):
+    # Chercher le client dans le DataFrame
+    client_row = df_clients[df_clients["SK_ID_CURR"] == request.SK_ID_CURR]
+    if client_row.empty:
+        raise HTTPException(status_code=404, detail=f"Client {request.SK_ID_CURR} non trouvé.")
 
-    # Créer le DataFrame pour le pipeline
-    df = pd.DataFrame([full_dict])
+    # Prendre la première ligne (en cas de doublon)
+    client_dict = client_row.iloc[0].to_dict()
+
+    # Compléter toutes les colonnes manquantes par 0
+    full_dict = {col: client_dict.get(col, 0.0) for col in ALL_COLUMNS}
+
+    # DataFrame pour le pipeline
+    df_input = pd.DataFrame([full_dict])
 
     # Prédiction
-    proba = float(pipe.predict_proba(df)[0][1])
+    proba = float(pipe.predict_proba(df_input)[0][1])
     prediction = int(proba > THRESHOLD_METIER)
 
     return {
