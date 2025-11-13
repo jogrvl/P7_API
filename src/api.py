@@ -1,54 +1,82 @@
 # src/api.py
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import pandas as pd
 import joblib
 import os
+import requests
 
-# Seuil métier optimal
+# -----------------------------
+# Paramètres
+# -----------------------------
 THRESHOLD_METIER = 0.54
+DATA_PATH = os.path.join(os.path.dirname(__file__), "..", "train_df_cleaned.csv")
+DRIVE_DOWNLOAD_URL = "https://drive.google.com/uc?export=download&id=1pOgCnUZYEmmhevjbj2jBQU2Tre0uhUG6"
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "modele_pipeline.pkl")
 
-# Chemin vers le pipeline et les données
-BASE_DIR = os.path.dirname(__file__)
-MODEL_PATH = os.path.join(BASE_DIR, "..", "modele_pipeline.pkl")
-DATA_PATH = os.path.join(BASE_DIR, "..", "train_df_cleaned.csv")
+# -----------------------------
+# Télécharger le CSV si nécessaire
+# -----------------------------
+if not os.path.exists(DATA_PATH):
+    print("Téléchargement de train_df_cleaned.csv depuis Google Drive...")
+    response = requests.get(DRIVE_DOWNLOAD_URL, stream=True)
+    response.raise_for_status()
+    with open(DATA_PATH, "wb") as f:
+        for chunk in response.iter_content(chunk_size=8192):
+            f.write(chunk)
+    print("Téléchargement terminé.")
 
-# Charger le pipeline et les données
-pipe = joblib.load(MODEL_PATH)
+# Charger le CSV
 df_clients = pd.read_csv(DATA_PATH)
+df_clients.set_index("SK_ID_CURR", inplace=True)  # Utiliser SK_ID_CURR comme index
 
-# Colonnes attendues par le pipeline
-ALL_COLUMNS = pipe.feature_names_in_
+# -----------------------------
+# Charger le pipeline
+# -----------------------------
+pipe = joblib.load(MODEL_PATH)
+ALL_COLUMNS = pipe.feature_names_in_  # sklearn >=1.0
 
-# Créer l'application FastAPI
+# -----------------------------
+# Initialisation FastAPI
+# -----------------------------
 app = FastAPI(title="API Scoring Crédit P7", version="1.0")
 
-# Modèle Pydantic pour l'input
+# -----------------------------
+# Modèle de données pour l'entrée
+# -----------------------------
 class ClientRequest(BaseModel):
     SK_ID_CURR: int
 
+# -----------------------------
+# Routes
+# -----------------------------
 @app.get("/")
 def root():
     return {"message": "API Scoring Crédit - OK"}
 
 @app.post("/predict")
 def predict_score(request: ClientRequest):
-    # Chercher le client dans le DataFrame
-    client_row = df_clients[df_clients["SK_ID_CURR"] == request.SK_ID_CURR]
-    if client_row.empty:
-        raise HTTPException(status_code=404, detail=f"Client {request.SK_ID_CURR} non trouvé.")
+    client_id = request.SK_ID_CURR
 
-    # Prendre la première ligne (en cas de doublon)
-    client_dict = client_row.iloc[0].to_dict()
+    # Vérifier que l'ID existe dans le CSV
+    if client_id not in df_clients.index:
+        raise HTTPException(status_code=404, detail=f"Client {client_id} non trouvé")
 
-    # Compléter toutes les colonnes manquantes par 0
-    full_dict = {col: client_dict.get(col, 0.0) for col in ALL_COLUMNS}
+    # Récupérer les données du client
+    client_data = df_clients.loc[client_id].to_dict()
 
-    # DataFrame pour le pipeline
-    df_input = pd.DataFrame([full_dict])
+    # Compléter les colonnes manquantes du pipeline
+    full_dict = {col: 0.0 for col in ALL_COLUMNS}
+    for col in client_data:
+        if col in ALL_COLUMNS:
+            full_dict[col] = client_data[col]
+
+    # DataFrame pour la prédiction
+    df = pd.DataFrame([full_dict])
 
     # Prédiction
-    proba = float(pipe.predict_proba(df_input)[0][1])
+    proba = float(pipe.predict_proba(df)[0][1])
     prediction = int(proba > THRESHOLD_METIER)
 
     return {
